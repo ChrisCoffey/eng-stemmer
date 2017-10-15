@@ -6,12 +6,23 @@ module Data.Text.Stemming.English
 ) where
 
 import Control.Monad.Reader (MonadReader)
+import Control.Monad.State.Strict
 import Control.Applicative ((<|>))
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
 import qualified Data.Set as S
 import qualified Data.Map as M
 import Data.Proxy
 import qualified Data.Text as T
+
+-- $setup
+-- Always import Data.Text and other modules
+-- >>> import Data.Text
+
+data WordRegion = WR {
+    word :: T.Text,
+    r1 :: T.Text,
+    r2 :: T.Text
+    } deriving Show
 
 class HasStemmingConf a where
     stopwords :: a -> S.Set T.Text
@@ -34,28 +45,54 @@ pureStem stopwords input =
     word = T.toLower input
     stemmed = doStem word
 
--- | The main stemming function
+-- | The main stemming function. The Porter2 algorithm relies on
+-- mutation and is much simpler to implement in State vs. a fold
 doStem :: T.Text -> T.Text
-doStem = undefined
+doStem input = word . flip execState regions $
+    step0 >> step1 >> step2 >> step3 >> step4 >> step5
+    where
+    regions = computeRegions $ scrubWord input
 
 scrubWord :: T.Text -> T.Text
 scrubWord =
     markConsonantY . stripLeadingApostrophe . normApostrophe
 
+--
+-- Helper functions for word scrubbing
+--
+
 -- | Slowish approach to normalizing the apostophe character
+--
+-- >>> pack "isn't" == normApostrophe (pack "isn\x2018t")
+-- True
+-- >>> pack "isn't" == normApostrophe (pack "isn\x2019t")
+-- True
+-- >>> pack "isn't" == normApostrophe (pack "isn\x201Bt")
+-- True
 normApostrophe :: T.Text -> T.Text
 normApostrophe =
     T.replace "\x2018" "\x27" .
-    T.replace "\x2018" "\x27" .
+    T.replace "\x2019" "\x27" .
     T.replace "\x201B" "\x27"
 
+
 -- | Assumes the input is non-empty by virtue of `checkLength`
+--
+-- >>> pack "isn't"  == stripLeadingApostrophe (pack "'isn't")
+-- True
 stripLeadingApostrophe :: T.Text -> T.Text
 stripLeadingApostrophe word
     | T.isPrefixOf "\x27" word = T.tail word
     | otherwise = word
 
 -- | Encodes the rules for when 'y' behaves as a consonant via an uppercase 'Y'
+--
+-- >>> pack "Your" == markConsonantY (pack "your")
+-- True
+-- >>> pack "toY" == markConsonantY (pack "toy")
+-- True
+-- >>> pack "bouYant" == markConsonantY (pack "bouyant")
+-- True
 markConsonantY :: T.Text -> T.Text
 markConsonantY = go . replaceInit
     where
@@ -69,6 +106,85 @@ markConsonantY = go . replaceInit
         | otherwise = 'y'
     f _ c = c
 
+--
+-- Regions
+--
+
+-- | Vowl regions are computed from the front of the word. Examples pulled from:
+-- https://snowballstem.org/texts/r1r2.html
+--
+-- >>> r1 (computeRegions $ pack "beautiful") == pack "iful"
+-- True
+-- >>> r2 (computeRegions $ pack "beautiful") == pack "ul"
+-- True
+--
+-- >>> r1 (computeRegions $ pack "beauty") == pack "y"
+-- True
+-- >>> r2 (computeRegions $ pack "beauty") == pack ""
+-- True
+--
+-- >>> r1 (computeRegions $ pack "beau") == pack ""
+-- True
+-- >>> r2 (computeRegions $ pack "beau") == pack ""
+-- True
+--
+-- >>> r1 (computeRegions $ pack "animadversion") == pack "imadversion"
+-- True
+-- >>> r2 (computeRegions $ pack "animadversion") == pack "adversion"
+-- True
+
+-- >>> r1 (computeRegions $ pack "sprinkled") == pack "kled"
+-- True
+-- >>> r2 (computeRegions $ pack "sprinkled") == pack ""
+-- True
+
+-- >>> r1 (computeRegions $ pack "eucharist") == pack "harist"
+-- True
+-- >>> r2 (computeRegions $ pack "eucharist") == pack "ist"
+-- True
+computeRegions :: T.Text -> WordRegion
+computeRegions word = let
+    r1 = fromMaybe (region word) (specialRegion word) -- Attempt to extract a special region, but otherwise normal region
+    r2 = region r1
+    in WR word r1 r2
+    where
+    region txt
+        | T.null txt || T.null (T.tail txt) = ""
+        | otherwise =
+            case (T.head txt, T.head (T.tail txt)) of
+                (a,b) | a `elem` vowls && (b `notElem` vowls) -> T.tail $ T.tail txt
+                (a,b) -> region $ T.tail txt
+    specialRegion txt = listToMaybe . catMaybes $ [T.stripPrefix x txt | x <- ["gener", "commun", "arsen"]]
+
+--
+-- Steps
+--
+
+-- | These suffixes are by length. This is used by Step0 to check for a suffix by length
+step0Suffixes :: [T.Text]
+step0Suffixes = ["'s'", "'s", "'"]
+
+step0 :: State WordRegion ()
+step0 = undefined
+
+step1 :: State WordRegion ()
+step1 = undefined
+
+step2 :: State WordRegion ()
+step2 = undefined
+
+
+step3 :: State WordRegion ()
+step3 = undefined
+
+step4 :: State WordRegion ()
+step4 = undefined
+
+step5 :: State WordRegion ()
+step5 = undefined
+--
+-- Initial checks. These short circut for various special cases
+--
 
 -- | Stopwords will not be stemmed
 checkStop :: S.Set T.Text -> T.Text -> Maybe T.Text
