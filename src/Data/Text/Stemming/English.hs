@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Data.Text.Stemming.English
 (   stem,
@@ -9,6 +11,7 @@ import Control.Monad.Reader (MonadReader)
 import Control.Monad.State.Strict
 import Control.Applicative ((<|>))
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
+import Data.Foldable (asum)
 import qualified Data.Set as S
 import qualified Data.Map as M
 import Data.Proxy
@@ -23,6 +26,9 @@ data WordRegion = WR {
     r1 :: T.Text,
     r2 :: T.Text
     } deriving Show
+
+mapWR :: (T.Text -> T.Text) -> WordRegion -> WordRegion
+mapWR f (WR word r1 r2) = WR (f word) (f r1) (f r2)
 
 class HasStemmingConf a where
     stopwords :: a -> S.Set T.Text
@@ -164,8 +170,29 @@ computeRegions word = let
 step0Suffixes :: [T.Text]
 step0Suffixes = ["'s'", "'s", "'"]
 
+-- | Removes posessive suffixes
+--
+-- >>> import Control.Monad.State.Strict
+-- >>> let wr = computeRegions $ scrubWord (pack "beauty")
+-- >>> word $ execState step0 wr
+-- "beauty"
+--
+-- >>> let wr2 = computeRegions $ scrubWord (pack "beauty's")
+-- >>> word $ execState step0 wr2
+-- "beauty"
 step0 :: State WordRegion ()
-step0 = undefined
+step0 = do
+    wr <- get
+    let wr' = fromMaybe wr . asum $ dropSuffix wr <$> step0Suffixes
+    put wr'
+    where
+    dropSuffix wr s
+        | T.isSuffixOf s (word wr) = let
+            len = T.length s
+            wr' = mapWR (T.dropEnd len) wr
+            in Just wr'
+        | otherwise = Nothing
+
 
 step1 :: State WordRegion ()
 step1 = undefined
