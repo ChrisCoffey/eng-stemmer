@@ -197,6 +197,51 @@ step0 = do
 step1 :: State WordRegion ()
 step1 = undefined
 
+-- | Replaces a few suffixes
+--
+-- >>> import Control.Monad.State.Strict
+-- >>> let wr = computeRegions $ scrubWord (pack "misses")
+-- >>> word $ execState step1a wr
+-- "miss"
+--
+-- >>> let wr = computeRegions $ scrubWord (pack "tied")
+-- >>> word $ execState step1a wr
+-- "tie"
+--
+-- >>> let wr = computeRegions $ scrubWord (pack "cries")
+-- >>> word $ execState step1a wr
+-- "cri"
+--
+-- >>> let wr = computeRegions $ scrubWord (pack "gas")
+-- >>> word $ execState step1a wr
+-- "gas"
+--
+-- >>> let wr = computeRegions $ scrubWord (pack "gaps")
+-- >>> word $ execState step1a wr
+-- "gap"
+step1a :: State WordRegion ()
+step1a = do
+    wr <- get
+    let w = word wr
+        wr' = fromMaybe wr . asum $ [(f . const wr) <$> T.stripSuffix s w | (s, f) <- suffixes]
+    put wr'
+    where
+    suffixes = [
+        ("sses", ssesF),
+        ("ied", ieF),
+        ("ies", ieF),
+        ("s", sF)]
+    -- Replace 'sses' with 'ss'
+    ssesF = mapWR (T.dropEnd 2)
+    -- Replace 'ied' or 'ies' with 'i' or 'ie'
+    ieF wr
+        | T.length (word wr) > 4 = mapWR (T.dropEnd 2) wr
+        | otherwise = mapWR (T.dropEnd 1) wr
+    -- Drop trailing 's' iff there is a vowl prior to the 2nd to last character
+    sF wr
+        | T.any (`elem` vowls) (T.dropEnd 2 (word wr)) = mapWR (T.dropEnd 1) wr
+        | otherwise = wr
+
 step2 :: State WordRegion ()
 step2 = undefined
 
