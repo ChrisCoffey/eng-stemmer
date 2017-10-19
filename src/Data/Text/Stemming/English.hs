@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Data.Text.Stemming.English
 (   stem,
@@ -16,6 +17,8 @@ import qualified Data.Set as S
 import qualified Data.Map as M
 import Data.Proxy
 import qualified Data.Text as T
+
+--todo pull out the state monad, I don't need it
 
 -- $setup
 -- Always import Data.Text and other modules
@@ -241,6 +244,49 @@ step1a = do
     sF wr
         | T.any (`elem` vowls) (T.dropEnd 2 (word wr)) = mapWR (T.dropEnd 1) wr
         | otherwise = wr
+
+step1b :: State WordRegion ()
+step1b = do
+    wr <- get
+    let w' = word wr
+        wr' = fromMaybe wr . asum $ [(f . const wr) <$> T.stripSuffix s w' | (s,f) <- suffixes]
+    put wr'
+    where
+    suffixes = [
+        ("eedly", eeF "eedly"),
+        ("eed", eeF "eed"),
+        ("edly", edF "edly"),
+        ("ingly", edF "ingly"),
+        ("ed", edF "ed"),
+        ("ing", edF "ing")
+        ]
+
+    -- Replace 'eed' variants with 'ee'
+    eeF s wr = case mapWR (fromMaybe "" . T.stripSuffix s) wr of
+        -- We know by virtue of r1 being nonempty that it ended in the suffix
+        (WR word r1 r2) | not (T.null r1) -> let
+            r2' = if T.null r2
+                  then ""
+                  else T.append r2 "ee"
+            in WR (T.append word "ee") (T.append r1 "ee") r2'
+        _ -> mapWR (T.dropEnd $ T.length s) wr
+
+    -- Remove 'ed' & "ing" variants & follow byzantine replace rules...
+    edF s wr =
+        case T.stripSuffix s (word wr) of
+            Just w' | T.any (`elem` vowls) w' ->
+                let wr' = mapWR (fromMaybe "" . T.stripSuffix s) wr
+                in if
+                    | T.takeEnd 2 w' `elem` doubleConsonants -> endsInDoubleConsonant wr'
+                    | T.length w' <= 3 -> addAnE wr'
+                    | T.takeEnd 2 w' `elem` specialEndings -> addAnE wr'
+                    | otherwise -> wr'
+            _ -> wr
+        where
+        doubleConsonants = ["bb", "dd", "ff", "gg", "mm", "nn", "pp", "rr", "tt"]
+        endsInDoubleConsonant = mapWR (T.dropEnd 1)
+        addAnE = mapWR (\w -> if T.null w then w else w `T.snoc` 'e')
+        specialEndings = ["at", "bl", "iz"]
 
 step2 :: State WordRegion ()
 step2 = undefined
