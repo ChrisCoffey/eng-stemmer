@@ -198,7 +198,7 @@ step0 = do
 
 
 step1 :: State WordRegion ()
-step1 = undefined
+step1 = step1a >> step1b >> step1c
 
 -- | Replaces a few suffixes
 --
@@ -245,6 +245,24 @@ step1a = do
         | T.any (`elem` vowls) (T.dropEnd 2 (word wr)) = mapWR (T.dropEnd 1) wr
         | otherwise = wr
 
+-- | Replace ed, ly, & ing variant suffixes
+--
+-- >>> import Control.Monad.State.Strict
+-- >>> let wr = computeRegions $ scrubWord (pack "speed")
+-- >>> word $ execState step1b wr
+-- "sp"
+--
+-- >>> let wr = computeRegions $ scrubWord (pack "luxuriating")
+-- >>> word $ execState step1b wr
+-- "luxuriate"
+--
+-- >>> let wr = computeRegions $ scrubWord (pack "hopped")
+-- >>> word $ execState step1b wr
+-- "hop"
+--
+-- >>> let wr = computeRegions $ scrubWord (pack "hoped")
+-- >>> word $ execState step1b wr
+-- "hope"
 step1b :: State WordRegion ()
 step1b = do
     wr <- get
@@ -276,7 +294,8 @@ step1b = do
         case T.stripSuffix s (word wr) of
             Just w' | T.any (`elem` vowls) w' ->
                 let wr' = mapWR (fromMaybe "" . T.stripSuffix s) wr
-                in if
+                in
+                   if
                     | T.takeEnd 2 w' `elem` doubleConsonants -> endsInDoubleConsonant wr'
                     | T.length w' <= 3 -> addAnE wr'
                     | T.takeEnd 2 w' `elem` specialEndings -> addAnE wr'
@@ -287,6 +306,20 @@ step1b = do
         endsInDoubleConsonant = mapWR (T.dropEnd 1)
         addAnE = mapWR (\w -> if T.null w then w else w `T.snoc` 'e')
         specialEndings = ["at", "bl", "iz"]
+
+step1c :: State WordRegion ()
+step1c = do
+    wr <- get
+    put $ swapY wr
+    where
+    endsWith w c = T.last w == c
+    swapY wr
+        | T.length (word wr) <= 2 = wr
+        | word wr `endsWith` 'y' && not (T.init (word wr) `endsWith` 'i') =
+            mapWR (maybe "" (`T.snoc` 'i') . T.stripSuffix "y") wr
+        | word wr `endsWith` 'Y' && not (T.init (word wr) `endsWith` 'i') =
+            mapWR (maybe "" (`T.snoc` 'i') . T.stripSuffix "Y") wr
+        | otherwise = wr
 
 step2 :: State WordRegion ()
 step2 = undefined
