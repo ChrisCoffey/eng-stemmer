@@ -335,15 +335,105 @@ step1c = do
             mapWR (maybe "" (`T.snoc` 'i') . T.stripSuffix "Y") wr
         | otherwise = wr
 
+swapLastWithE ::
+    T.Text ->
+    T.Text
+swapLastWithE = (`T.snoc` 'e') . T.dropEnd 1
+
+-- | Replace larger suffixes in order from largest to smallest, iff the suffix is in R1
 step2 :: State WordRegion ()
-step2 = undefined
+step2 = do
+    wr <- get
+    let w = word wr
+        wr' = fromMaybe wr . asum $ [const (suffixInR1 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
+    put wr'
+    where
+    suffixInR1 :: T.Text -> (T.Text -> T.Text) -> WordRegion -> Maybe WordRegion
+    suffixInR1 s f wr  = fmap (const $ mapWR f wr) . T.stripSuffix s $ r1 wr
+    suffixes = [
+        ("tional", T.dropEnd 2),
+        ("enci", swapLastWithE),
+        ("anci", swapLastWithE),
+        ("abli", swapLastWithE),
+        ("entli", T.dropEnd 2),
+        ("izer", T.dropEnd 1),
+        ("ational", swapLastWithE . T.dropEnd 4),
+        ("ation", swapLastWithE . T.dropEnd 2),
+        ("ator", swapLastWithE . T.dropEnd 1),
+        ("alism", T.dropEnd 3),
+        ("aliti", T.dropEnd 3),
+        ("alli", T.dropEnd 2),
+        ("fulness", T.dropEnd 4),
+        ("ousli", T.dropEnd 2),
+        ("ousness", T.dropEnd 4),
+        ("iveness", T.dropEnd 4),
+        ("iviti", swapLastWithE . T.dropEnd 2),
+        ("biliti", T.append "le" . T.dropEnd 6),
+        ("bli", swapLastWithE),
+        ("logi", T.append "log"),
+        ("fulli", T.dropEnd 2),
+        ("lessli", T.dropEnd 2),
+        ("li", \w -> if T.last w `elem` liEnding then w else T.append w "li")
+        ]
+    liEnding :: String
+    liEnding = "cdeghkmnrt"
 
+suffixInR1 :: T.Text -> (T.Text -> T.Text) -> WordRegion -> Maybe WordRegion
+suffixInR1 s f wr  = fmap (const $ mapWR f wr) . T.stripSuffix s $ r1 wr
 
+-- TODO this is identical to suffixInR1
+suffixInR2 :: T.Text -> (T.Text -> T.Text) -> WordRegion -> Maybe WordRegion
+suffixInR2 s f wr  = fmap (const $ mapWR f wr) . T.stripSuffix s $ r2 wr
+
+-- | Search for the longest suffix perform the replacement iff the suffix is in R1 as well
 step3 :: State WordRegion ()
-step3 = undefined
+step3 = do
+    wr <- get
+    let w = word wr
+        wr' = fromMaybe wr . asum $ specialCase wr:[const (suffixInR1 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
+    put wr'
+    where
+    suffixes = [
+        ("ational", swapLastWithE . T.dropEnd 4),
+        ("tional", T.dropEnd 2),
+        ("alize", T.dropEnd 3),
+        ("icate", T.dropEnd 3),
+        ("iciti", T.dropEnd 3),
+        ("ical", T.dropEnd 2),
+        ("ful", id),
+        ("ness", id)
+        ]
+    specialCase wr = const (suffixInR2 "ative" id wr) =<< T.stripSuffix "ative" (word wr)
 
 step4 :: State WordRegion ()
-step4 = undefined
+step4 = do
+    wr <- get
+    let w = word wr
+        wr' = fromMaybe wr . asum $ [const (suffixInR1 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
+    put wr'
+    where
+    -- Using 'id' as a suffix handler will delete the suffix
+    suffixes = [
+        ("ement", id),
+        ("ment", id),
+        ("ance", id),
+        ("ence", id),
+        ("able", id),
+        ("ible", id),
+        ("sion", id),
+        ("tion", id),
+        ("ant", id),
+        ("ent", id),
+        ("ism", id),
+        ("ate", id),
+        ("iti", id),
+        ("ous", id),
+        ("ive", id),
+        ("ize", id),
+        ("al", id),
+        ("er", id),
+        ("ic", id)
+        ]
 
 step5 :: State WordRegion ()
 step5 = undefined
