@@ -307,6 +307,20 @@ step1b = do
         addAnE = mapWR (\w -> if T.null w then w else w `T.snoc` 'e')
         specialEndings = ["at", "bl", "iz"]
 
+-- | Replace trailing 'y' with an i where appropriate
+--
+-- >>> import Control.Monad.State.Strict
+-- >>> let wr = computeRegions $ scrubWord (pack "cry")
+-- >>> word $ execState step1c wr
+-- "cri"
+--
+-- >>> let wr = computeRegions $ scrubWord (pack "by")
+-- >>> word $ execState step1c wr
+-- "by"
+--
+-- >>> let wr = computeRegions $ scrubWord (pack "say")
+-- >>> word $ execState step1c wr
+-- "saY"
 step1c :: State WordRegion ()
 step1c = do
     wr <- get
@@ -315,9 +329,9 @@ step1c = do
     endsWith w c = T.last w == c
     swapY wr
         | T.length (word wr) <= 2 = wr
-        | word wr `endsWith` 'y' && not (T.init (word wr) `endsWith` 'i') =
+        | word wr `endsWith` 'y' && notElem (T.last . T.init $ word wr) vowls =
             mapWR (maybe "" (`T.snoc` 'i') . T.stripSuffix "y") wr
-        | word wr `endsWith` 'Y' && not (T.init (word wr) `endsWith` 'i') =
+        | word wr `endsWith` 'Y' && notElem (T.last . T.init $ word wr) vowls =
             mapWR (maybe "" (`T.snoc` 'i') . T.stripSuffix "Y") wr
         | otherwise = wr
 
