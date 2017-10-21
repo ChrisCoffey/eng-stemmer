@@ -55,7 +55,8 @@ pureStem stopwords input =
     stemmed = doStem word
 
 -- | The main stemming function. The Porter2 algorithm relies on
--- mutation and is much simpler to implement in State vs. a fold
+-- iteratively applying a number of rules in sequence to gradually transform
+-- the input string
 doStem :: T.Text -> T.Text
 doStem input = T.toLower . word . flip execState regions $
     step0 >> step1 >> step2 >> step3 >> step4 >> step5
