@@ -57,7 +57,7 @@ pureStem stopwords input =
 -- | The main stemming function. The Porter2 algorithm relies on
 -- mutation and is much simpler to implement in State vs. a fold
 doStem :: T.Text -> T.Text
-doStem input = word . flip execState regions $
+doStem input = T.toLower . word . flip execState regions $
     step0 >> step1 >> step2 >> step3 >> step4 >> step5
     where
     regions = computeRegions $ scrubWord input
@@ -400,11 +400,16 @@ step3 = do
         ("icate", T.dropEnd 3),
         ("iciti", T.dropEnd 3),
         ("ical", T.dropEnd 2),
-        ("ful", id),
-        ("ness", id)
+        ("ful", T.dropEnd 3),
+        ("ness", T.dropEnd 4)
         ]
     specialCase wr = const (suffixInR2 "ative" id wr) =<< T.stripSuffix "ative" (word wr)
 
+-- | Deletes many common suffixes
+-- >>> import Control.Monad.State.Strict
+-- >>> let wr = computeRegions $ scrubWord (pack "conscious")
+-- >>> word $ execState step4 wr
+-- "consci"
 step4 :: State WordRegion ()
 step4 = do
     wr <- get
@@ -414,29 +419,39 @@ step4 = do
     where
     -- Using 'id' as a suffix handler will delete the suffix
     suffixes = [
-        ("ement", id),
-        ("ment", id),
-        ("ance", id),
-        ("ence", id),
-        ("able", id),
-        ("ible", id),
-        ("sion", id),
-        ("tion", id),
-        ("ant", id),
-        ("ent", id),
-        ("ism", id),
-        ("ate", id),
-        ("iti", id),
-        ("ous", id),
-        ("ive", id),
-        ("ize", id),
-        ("al", id),
-        ("er", id),
-        ("ic", id)
+        ("ement", T.dropEnd 5),
+        ("ment", T.dropEnd 4),
+        ("ance", T.dropEnd 4),
+        ("ence", T.dropEnd 4),
+        ("able", T.dropEnd 4),
+        ("ible", T.dropEnd 4),
+        ("sion", T.dropEnd 4),
+        ("tion", T.dropEnd 4),
+        ("ant", T.dropEnd 3),
+        ("ent", T.dropEnd 3),
+        ("ism", T.dropEnd 3),
+        ("ate", T.dropEnd 3),
+        ("iti", T.dropEnd 3),
+        ("ous", T.dropEnd 3),
+        ("ive", T.dropEnd 3),
+        ("ize", T.dropEnd 3),
+        ("al", T.dropEnd 2),
+        ("er", T.dropEnd 2),
+        ("ic", T.dropEnd 2)
         ]
 
 step5 :: State WordRegion ()
-step5 = undefined
+step5 = do
+    wr <- get
+    let wr' = fromMaybe wr . asum $ [stripL, stripE] <*> [wr]
+    put wr'
+    where
+    stripL wr
+        | T.isSuffixOf "ll" (r2 wr) = Just $ mapWR (T.dropEnd 1) wr
+        | otherwise = Nothing
+    stripE wr
+        | T.isSuffixOf "e" (r2 wr) = Just $ mapWR (T.dropEnd 1) wr
+        | otherwise = Nothing -- TODO there are more cases here
 --
 -- Initial checks. These short circut for various special cases
 --
