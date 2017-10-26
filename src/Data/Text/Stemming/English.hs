@@ -1,11 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiWayIf #-}
 
 module Data.Text.Stemming.English
-(   stem,
-    pureStem
+(
+    stem
 ) where
 
 import Control.Monad.Reader (MonadReader)
@@ -17,12 +15,22 @@ import qualified Data.Set as S
 import qualified Data.Map as M
 import Data.Proxy
 import qualified Data.Text as T
+import qualified Data.Text.Stemming.Constants.English as Constants
 
 --todo pull out the state monad, I don't need it
 
 -- $setup
 -- Always import Data.Text and other modules
 -- >>> import Data.Text
+
+stem :: S.Set T.Text -> T.Text -> T.Text
+stem stopwords input =
+    fromMaybe stemmed $ checkStop stopwords word <|>
+        checkLength word <|>
+        checkSpecialWords word
+    where
+    word = T.toLower input
+    stemmed = doStem word
 
 data WordRegion = WR {
     word :: T.Text,
@@ -33,26 +41,8 @@ data WordRegion = WR {
 mapWR :: (T.Text -> T.Text) -> WordRegion -> WordRegion
 mapWR f (WR word r1 r2) = WR (f word) (f r1) (f r2)
 
-class HasStemmingConf a where
-    stopwords :: a -> S.Set T.Text
-
--- | 'stem' simply wraps 'pureStem' with a Reader monad
-stem :: (Monad m, MonadReader r m, HasStemmingConf r) =>
-    T.Text ->
-    m T.Text
-stem = undefined
-
 vowls :: [Char]
 vowls = ['a', 'e', 'i', 'o', 'u', 'y']
-
-pureStem :: S.Set T.Text -> T.Text -> T.Text
-pureStem stopwords input =
-    fromMaybe stemmed $ checkStop stopwords word <|>
-        checkLength word <|>
-        checkSpecialWords word
-    where
-    word = T.toLower input
-    stemmed = doStem word
 
 -- | The main stemming function. The Porter2 algorithm relies on
 -- iteratively applying a number of rules in sequence to gradually transform
@@ -243,7 +233,9 @@ step1a = do
         | otherwise = mapWR (T.dropEnd 1) wr
     -- Drop trailing 's' iff there is a vowl prior to the 2nd to last character
     sF wr
-        | T.any (`elem` vowls) (T.dropEnd 2 (word wr)) = mapWR (T.dropEnd 1) wr
+        | T.any (`elem` vowls) (T.dropEnd 2 (word wr)) &&
+          T.takeEnd 2 (word wr) `notElem` ["ss", "us"]
+            = mapWR (T.dropEnd 1) wr
         | otherwise = wr
 
 -- | Replace ed, ly, & ing variant suffixes
@@ -415,7 +407,7 @@ step4 :: State WordRegion ()
 step4 = do
     wr <- get
     let w = word wr
-        wr' = fromMaybe wr . asum $ [const (suffixInR1 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
+        wr' = fromMaybe wr . asum $ [const (suffixInR2 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
     put wr'
     where
     -- Using 'id' as a suffix handler will delete the suffix
@@ -473,45 +465,4 @@ checkLength word
 -- automatically stems them since its not worth the effort to algorithmically
 -- stem them.
 checkSpecialWords :: T.Text -> Maybe T.Text
-checkSpecialWords word = M.lookup word specialWords
-    where
-        specialWords = M.fromList [("skis" , "ski"),
-            ("skies" , "sky"),
-            ("dying" , "die"),
-            ("lying" , "lie"),
-            ("tying" , "tie"),
-            ("idly" , "idl"),
-            ("gently" , "gentl"),
-            ("ugly" , "ugli"),
-            ("early" , "earli"),
-            ("only" , "onli"),
-            ("singly" , "singl"),
-            ("sky" , "sky"),
-            ("news" , "news"),
-            ("howe" , "howe"),
-            ("atlas" , "atlas"),
-            ("cosmos" , "cosmos"),
-            ("bias" , "bias"),
-            ("andes" , "andes"),
-            ("inning" , "inning"),
-            ("innings" , "inning"),
-            ("outing" , "outing"),
-            ("outings" , "outing"),
-            ("canning" , "canning"),
-            ("cannings" , "canning"),
-            ("herring" , "herring"),
-            ("herrings" , "herring"),
-            ("earring" , "earring"),
-            ("earrings" , "earring"),
-            ("proceed" , "proceed"),
-            ("proceeds" , "proceed"),
-            ("proceeded" , "proceed"),
-            ("proceeding" , "proceed"),
-            ("exceed" , "exceed"),
-            ("exceeds" , "exceed"),
-            ("exceeded" , "exceed"),
-            ("exceeding" , "exceed"),
-            ("succeed" , "succeed"),
-            ("succeeds" , "succeed"),
-            ("succeeded" , "succeed"),
-            ("succeeding" , "succeed")]
+checkSpecialWords word = M.lookup word Constants.specialStems
