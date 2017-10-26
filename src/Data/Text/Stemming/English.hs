@@ -319,14 +319,22 @@ step1c = do
     wr <- get
     put $ swapY wr
     where
-    endsWith w c = T.last w == c
+    endsWith w c = T.takeEnd 1 w == c
+    safeNonVowl = fromMaybe '_' . safeHead
     swapY wr
         | T.length (word wr) <= 2 = wr
-        | word wr `endsWith` 'y' && notElem (T.last . T.init $ word wr) vowls =
+        | word wr `endsWith` "y" && notElem (safeNonVowl . T.takeEnd 1 . T.init $ word wr) vowls =
             mapWR (maybe "" (`T.snoc` 'i') . T.stripSuffix "y") wr
-        | word wr `endsWith` 'Y' && notElem (T.last . T.init $ word wr) vowls =
+        | word wr `endsWith` "Y" && notElem (safeNonVowl . T.takeEnd 1 . T.init $ word wr) vowls =
             mapWR (maybe "" (`T.snoc` 'i') . T.stripSuffix "Y") wr
         | otherwise = wr
+
+safeHead ::
+    T.Text ->
+    Maybe Char
+safeHead t
+    | T.length t >= 1 = Just $ T.head t
+    | otherwise = Nothing
 
 swapLastWithE ::
     T.Text ->
@@ -366,7 +374,9 @@ step2 = do
         ("logi", T.append "log"),
         ("fulli", T.dropEnd 2),
         ("lessli", T.dropEnd 2),
-        ("li", \w -> if T.last w `elem` liEnding then w else T.append w "li")
+        ("li", \w -> if (fromMaybe ' ' . safeHead $ T.takeEnd 3 w) `elem` liEnding
+                     then T.dropEnd 2 w
+                     else w)
         ]
     liEnding :: String
     liEnding = "cdeghkmnrt"
