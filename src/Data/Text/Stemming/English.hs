@@ -7,7 +7,6 @@ module Data.Text.Stemming.English
 ) where
 
 import Control.Monad.Reader (MonadReader)
-import Control.Monad.State.Strict
 import Control.Applicative ((<|>))
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
 import Data.Foldable (asum)
@@ -16,8 +15,6 @@ import qualified Data.Map as M
 import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Text.Stemming.Constants.English as Constants
-
---todo pull out the state monad, I don't need it
 
 -- $setup
 -- Always import Data.Text and other modules
@@ -48,10 +45,12 @@ vowls = ['a', 'e', 'i', 'o', 'u', 'y']
 -- iteratively applying a number of rules in sequence to gradually transform
 -- the input string
 doStem :: T.Text -> T.Text
-doStem input = T.toLower . word . flip execState regions $
-    step0 >> step1 >> step2 >> step3 >> step4 >> step5
+doStem =
+    extractResult . stemmingSteps . regions
     where
-    regions = computeRegions $ scrubWord input
+        extractResult = T.toLower . word
+        stemmingSteps = step5 . step4 . step3 . step2 . step1 . step0
+        regions = computeRegions . scrubWord
 
 scrubWord :: T.Text -> T.Text
 scrubWord =
@@ -166,19 +165,17 @@ step0Suffixes = ["'s'", "'s", "'"]
 
 -- | Removes posessive suffixes
 --
--- >>> import Control.Monad.State.Strict
 -- >>> let wr = computeRegions $ scrubWord (pack "beauty")
--- >>> word $ execState step0 wr
+-- >>> word $  step0 wr
 -- "beauty"
 --
 -- >>> let wr2 = computeRegions $ scrubWord (pack "beauty's")
--- >>> word $ execState step0 wr2
+-- >>> word $  step0 wr2
 -- "beauty"
-step0 :: State WordRegion ()
-step0 = do
-    wr <- get
-    let wr' = fromMaybe wr . asum $ dropSuffix wr <$> step0Suffixes
-    put wr'
+step0 ::
+    WordRegion ->
+    WordRegion
+step0 wr = fromMaybe wr . asum $ dropSuffix wr <$> step0Suffixes
     where
     dropSuffix wr s
         | T.isSuffixOf s (word wr) = let
@@ -188,37 +185,38 @@ step0 = do
         | otherwise = Nothing
 
 
-step1 :: State WordRegion ()
+step1 ::
+    WordRegion ->
+    WordRegion
 step1 = step1a >> step1b >> step1c
 
 -- | Replaces a few suffixes
 --
--- >>> import Control.Monad.State.Strict
 -- >>> let wr = computeRegions $ scrubWord (pack "misses")
--- >>> word $ execState step1a wr
+-- >>> word $  step1a wr
 -- "miss"
 --
 -- >>> let wr = computeRegions $ scrubWord (pack "tied")
--- >>> word $ execState step1a wr
+-- >>> word $  step1a wr
 -- "tie"
 --
 -- >>> let wr = computeRegions $ scrubWord (pack "cries")
--- >>> word $ execState step1a wr
+-- >>> word $  step1a wr
 -- "cri"
 --
 -- >>> let wr = computeRegions $ scrubWord (pack "gas")
--- >>> word $ execState step1a wr
+-- >>> word $  step1a wr
 -- "gas"
 --
 -- >>> let wr = computeRegions $ scrubWord (pack "gaps")
--- >>> word $ execState step1a wr
+-- >>> word $  step1a wr
 -- "gap"
-step1a :: State WordRegion ()
-step1a = do
-    wr <- get
+step1a ::
+    WordRegion ->
+    WordRegion
+step1a wr =
     let w = word wr
-        wr' = fromMaybe wr . asum $ [(f . const wr) <$> T.stripSuffix s w | (s, f) <- suffixes]
-    put wr'
+    in fromMaybe wr . asum $ [(f . const wr) <$> T.stripSuffix s w | (s, f) <- suffixes]
     where
     suffixes = [
         ("sses", ssesF),
@@ -240,28 +238,27 @@ step1a = do
 
 -- | Replace ed, ly, & ing variant suffixes
 --
--- >>> import Control.Monad.State.Strict
 -- >>> let wr = computeRegions $ scrubWord (pack "speed")
--- >>> word $ execState step1b wr
+-- >>> word $  step1b wr
 -- "sp"
 --
 -- >>> let wr = computeRegions $ scrubWord (pack "luxuriating")
--- >>> word $ execState step1b wr
+-- >>> word $  step1b wr
 -- "luxuriate"
 --
 -- >>> let wr = computeRegions $ scrubWord (pack "hopped")
--- >>> word $ execState step1b wr
+-- >>> word $  step1b wr
 -- "hop"
 --
 -- >>> let wr = computeRegions $ scrubWord (pack "hoped")
--- >>> word $ execState step1b wr
+-- >>> word $  step1b wr
 -- "hope"
-step1b :: State WordRegion ()
-step1b = do
-    wr <- get
+step1b ::
+    WordRegion ->
+    WordRegion
+step1b wr =
     let w' = word wr
-        wr' = fromMaybe wr . asum $ [(f . const wr) <$> T.stripSuffix s w' | (s,f) <- suffixes]
-    put wr'
+    in fromMaybe wr . asum $ [(f . const wr) <$> T.stripSuffix s w' | (s,f) <- suffixes]
     where
     suffixes = [
         ("eedly", eeF "eedly"),
@@ -302,22 +299,21 @@ step1b = do
 
 -- | Replace trailing 'y' with an i where appropriate
 --
--- >>> import Control.Monad.State.Strict
 -- >>> let wr = computeRegions $ scrubWord (pack "cry")
--- >>> word $ execState step1c wr
+-- >>> word $  step1c wr
 -- "cri"
 --
 -- >>> let wr = computeRegions $ scrubWord (pack "by")
--- >>> word $ execState step1c wr
+-- >>> word $  step1c wr
 -- "by"
 --
 -- >>> let wr = computeRegions $ scrubWord (pack "say")
--- >>> word $ execState step1c wr
+-- >>> word $  step1c wr
 -- "saY"
-step1c :: State WordRegion ()
-step1c = do
-    wr <- get
-    put $ swapY wr
+step1c ::
+    WordRegion ->
+    WordRegion
+step1c = swapY
     where
     endsWith w c = T.takeEnd 1 w == c
     safeNonVowl = fromMaybe '_' . safeHead
@@ -342,12 +338,13 @@ swapLastWithE ::
 swapLastWithE = (`T.snoc` 'e') . T.dropEnd 1
 
 -- | Replace larger suffixes in order from largest to smallest, iff the suffix is in R1
-step2 :: State WordRegion ()
-step2 = do
-    wr <- get
+step2 ::
+    WordRegion ->
+    WordRegion
+step2 wr =
     let w = word wr
-        wr' = fromMaybe wr . asum $ [const (suffixInR1 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
-    put wr'
+    in fromMaybe wr . asum $
+        [const (suffixInR1 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
     where
     suffixInR1 :: T.Text -> (T.Text -> T.Text) -> WordRegion -> Maybe WordRegion
     suffixInR1 s f wr  = fmap (const $ mapWR f wr) . T.stripSuffix s $ r1 wr
@@ -389,12 +386,13 @@ suffixInR2 :: T.Text -> (T.Text -> T.Text) -> WordRegion -> Maybe WordRegion
 suffixInR2 s f wr  = fmap (const $ mapWR f wr) . T.stripSuffix s $ r2 wr
 
 -- | Search for the longest suffix perform the replacement iff the suffix is in R1 as well
-step3 :: State WordRegion ()
-step3 = do
-    wr <- get
+step3 ::
+    WordRegion ->
+    WordRegion
+step3 wr =
     let w = word wr
-        wr' = fromMaybe wr . asum $ specialCase wr:[const (suffixInR1 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
-    put wr'
+    in fromMaybe wr . asum $
+        specialCase wr:[const (suffixInR1 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
     where
     suffixes = [
         ("ational", swapLastWithE . T.dropEnd 4),
@@ -409,16 +407,16 @@ step3 = do
     specialCase wr = const (suffixInR2 "ative" id wr) =<< T.stripSuffix "ative" (word wr)
 
 -- | Deletes many common suffixes
--- >>> import Control.Monad.State.Strict
 -- >>> let wr = computeRegions $ scrubWord (pack "conscious")
--- >>> word $ execState step4 wr
+-- >>> word $  step4 wr
 -- "consci"
-step4 :: State WordRegion ()
-step4 = do
-    wr <- get
+step4 ::
+    WordRegion ->
+    WordRegion
+step4 wr =
     let w = word wr
-        wr' = fromMaybe wr . asum $ [const (suffixInR2 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
-    put wr'
+    in fromMaybe wr . asum $
+        [const (suffixInR2 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
     where
     -- Using 'id' as a suffix handler will delete the suffix
     suffixes = [
@@ -443,11 +441,10 @@ step4 = do
         ("ic", T.dropEnd 2)
         ]
 
-step5 :: State WordRegion ()
-step5 = do
-    wr <- get
-    let wr' = fromMaybe wr . asum $ [stripL, stripE] <*> [wr]
-    put wr'
+step5 ::
+    WordRegion ->
+    WordRegion
+step5 wr = fromMaybe wr . asum $ [stripL, stripE] <*> [wr]
     where
     stripL wr
         | T.isSuffixOf "ll" (r2 wr) = Just $ mapWR (T.dropEnd 1) wr
