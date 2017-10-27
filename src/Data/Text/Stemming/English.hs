@@ -188,7 +188,7 @@ step0 wr = fromMaybe wr . asum $ dropSuffix wr <$> step0Suffixes
 step1 ::
     WordRegion ->
     WordRegion
-step1 = step1a >> step1b >> step1c
+step1 = step1c . step1b . step1a
 
 -- | Replaces a few suffixes
 --
