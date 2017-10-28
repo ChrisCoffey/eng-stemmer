@@ -9,6 +9,7 @@ module Data.Text.Stemming.English
 import Control.Monad.Reader (MonadReader)
 import Control.Applicative ((<|>))
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
+import Data.Monoid ((<>))
 import Data.Foldable (asum)
 import qualified Data.Set as S
 import qualified Data.Map as M
@@ -253,6 +254,10 @@ step1a wr =
 -- >>> let wr = computeRegions $ scrubWord (pack "hoped")
 -- >>> word $  step1b wr
 -- "hope"
+--
+-- >>> wr = computeRegions $ scrubWord (pack "heeded")
+-- >>> word $ step1b wr
+-- "heed"
 step1b ::
     WordRegion ->
     WordRegion
@@ -287,7 +292,7 @@ step1b wr =
                 in
                    if
                     | T.takeEnd 2 w' `elem` doubleConsonants -> endsInDoubleConsonant wr'
-                    | T.length w' <= 3 -> addAnE wr'
+                    | T.length w' < 3 -> addAnE wr'
                     | T.takeEnd 2 w' `elem` specialEndings -> addAnE wr'
                     | otherwise -> wr'
             _ -> wr
@@ -349,28 +354,28 @@ step2 wr =
     suffixInR1 :: T.Text -> (T.Text -> T.Text) -> WordRegion -> Maybe WordRegion
     suffixInR1 s f wr  = fmap (const $ mapWR f wr) . T.stripSuffix s $ r1 wr
     suffixes = [
-        ("tional", T.dropEnd 2),
-        ("enci", swapLastWithE),
-        ("anci", swapLastWithE),
-        ("abli", swapLastWithE),
-        ("entli", T.dropEnd 2),
-        ("izer", T.dropEnd 1),
         ("ational", swapLastWithE . T.dropEnd 4),
-        ("ation", swapLastWithE . T.dropEnd 2),
-        ("ator", swapLastWithE . T.dropEnd 1),
-        ("alism", T.dropEnd 3),
-        ("aliti", T.dropEnd 3),
-        ("alli", T.dropEnd 2),
         ("fulness", T.dropEnd 4),
-        ("ousli", T.dropEnd 2),
         ("ousness", T.dropEnd 4),
         ("iveness", T.dropEnd 4),
-        ("iviti", swapLastWithE . T.dropEnd 2),
-        ("biliti", T.append "le" . T.dropEnd 6),
-        ("bli", swapLastWithE),
-        ("logi", T.append "log"),
-        ("fulli", T.dropEnd 2),
+        ("tional", T.dropEnd 2),
+        ("biliti", (`T.append` "le") . T.dropEnd 6),
         ("lessli", T.dropEnd 2),
+        ("iviti", swapLastWithE . T.dropEnd 2),
+        ("entli", T.dropEnd 2),
+        ("ation", swapLastWithE . T.dropEnd 2),
+        ("alism", T.dropEnd 3),
+        ("aliti", T.dropEnd 3),
+        ("ousli", T.dropEnd 2),
+        ("fulli", T.dropEnd 2),
+        ("enci", swapLastWithE),
+        ("alli", T.dropEnd 2),
+        ("anci", swapLastWithE),
+        ("abli", swapLastWithE),
+        ("izer", T.dropEnd 1),
+        ("ator", swapLastWithE . T.dropEnd 1),
+        ("logi", T.dropEnd 1),
+        ("bli", swapLastWithE),
         ("li", \w -> if (fromMaybe ' ' . safeHead $ T.takeEnd 3 w) `elem` liEnding
                      then T.dropEnd 2 w
                      else w)
@@ -382,8 +387,13 @@ suffixInR1 :: T.Text -> (T.Text -> T.Text) -> WordRegion -> Maybe WordRegion
 suffixInR1 s f wr  = fmap (const $ mapWR f wr) . T.stripSuffix s $ r1 wr
 
 -- TODO this is identical to suffixInR1
-suffixInR2 :: T.Text -> (T.Text -> T.Text) -> WordRegion -> Maybe WordRegion
-suffixInR2 s f wr  = fmap (const $ mapWR f wr) . T.stripSuffix s $ r2 wr
+suffixInR2 ::
+    T.Text ->
+    (T.Text -> T.Text) ->
+    WordRegion ->
+    Maybe WordRegion
+suffixInR2 s f wr  =
+    fmap (const $ mapWR f wr) . T.stripSuffix s $ r2 wr
 
 -- | Search for the longest suffix perform the replacement iff the suffix is in R1 as well
 step3 ::
@@ -401,14 +411,14 @@ step3 wr =
         ("icate", T.dropEnd 3),
         ("iciti", T.dropEnd 3),
         ("ical", T.dropEnd 2),
-        ("ful", T.dropEnd 3),
-        ("ness", T.dropEnd 4)
+        ("ness", T.dropEnd 4),
+        ("ful", T.dropEnd 3)
         ]
     specialCase wr = const (suffixInR2 "ative" id wr) =<< T.stripSuffix "ative" (word wr)
 
 -- | Deletes many common suffixes
 -- >>> let wr = computeRegions $ scrubWord (pack "conscious")
--- >>> word $  step4 wr
+-- >>> word $ step4 wr
 -- "consci"
 step4 ::
     WordRegion ->
@@ -418,7 +428,11 @@ step4 wr =
     in fromMaybe wr . asum $
         [const (suffixInR2 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
     where
-    -- Using 'id' as a suffix handler will delete the suffix
+    ionHandler wr = let
+        w = word wr
+        in if T.isSuffixOf "sion" w || T.isSuffixOf "tion" w
+           then T.dropEnd 3
+           else id
     suffixes = [
         ("ement", T.dropEnd 5),
         ("ment", T.dropEnd 4),
@@ -426,8 +440,7 @@ step4 wr =
         ("ence", T.dropEnd 4),
         ("able", T.dropEnd 4),
         ("ible", T.dropEnd 4),
-        ("sion", T.dropEnd 4),
-        ("tion", T.dropEnd 4),
+        ("ion", ionHandler wr),
         ("ant", T.dropEnd 3),
         ("ent", T.dropEnd 3),
         ("ism", T.dropEnd 3),
@@ -446,12 +459,22 @@ step5 ::
     WordRegion
 step5 wr = fromMaybe wr . asum $ [stripL, stripE] <*> [wr]
     where
+    vWXY = vowls <> ['w', 'x', 'Y']
+    shortWordCheck w
+        | T.length w >= 4 &&
+            (
+                T.head (T.takeEnd 2 w) `elem` vWXY ||
+                T.head (T.takeEnd 3 w) `notElem` vowls ||
+                T.head (T.takeEnd 4 w) `elem` vowls
+            ) = mapWR (T.dropEnd 1)
+        | otherwise = mapWR id
     stripL wr
-        | T.isSuffixOf "ll" (r2 wr) = Just $ mapWR (T.dropEnd 1) wr
+        | T.isSuffixOf "l" (r2 wr) && T.isSuffixOf "ll" (word wr) = Just $ mapWR (T.dropEnd 1) wr
         | otherwise = Nothing
     stripE wr
         | T.isSuffixOf "e" (r2 wr) = Just $ mapWR (T.dropEnd 1) wr
-        | otherwise = Nothing -- TODO there are more cases here
+        | T.isSuffixOf "e" (r1 wr) = Just $ shortWordCheck (word wr) wr
+        | otherwise = Just wr
 --
 -- Initial checks. These short circut for various special cases
 --
