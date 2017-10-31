@@ -105,6 +105,12 @@ testCases = [
     ("knocks","knock"),
     ("knopp","knopp"),
     ("knot","knot"),
-    ("knots","knot")
+    ("knots","knot"),
+    ("cheating", "cheat"),
+    ("floated", "float"),
+    ("migrated", "migrat"),
+    ("choked", "choke"),
+    ("foxes", "fox"),
+    ("bribing", "bribe")
     ]
 

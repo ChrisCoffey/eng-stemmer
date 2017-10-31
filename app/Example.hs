@@ -9,15 +9,15 @@ import Data.Text.Stemming.English (stem)
 main :: IO ()
 main = do
     let stopwords = S.empty
-    source <- fmap (stem stopwords) . T.lines <$> TIO.readFile "resources/voc.txt"
+    source <- fmap (\w -> (w, stem stopwords w) ) . T.lines <$> TIO.readFile "resources/voc.txt"
     validation <- T.lines <$> TIO.readFile "resources/output.txt"
     let errors = foldl validateStemming [] $ source `zip` validation
-    print $ "Failed to stem: " ++ (show $ length errors)
-    --print errors
+    -- print $ "Failed to stem: " ++ (show $ length errors)
+    print errors
     where
-        validateStemming acc (stemmed, validation)
+        validateStemming acc ((raw, stemmed), validation)
             | stemmed == validation = acc
-            | otherwise = (stemmed, validation):acc
+            | otherwise = (raw, stemmed, validation):acc
 
 
 

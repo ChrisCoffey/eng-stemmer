@@ -17,6 +17,8 @@ import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Text.Stemming.Constants.English as Constants
 
+import Debug.Trace
+
 -- $setup
 -- Always import Data.Text and other modules
 -- >>> import Data.Text
@@ -49,8 +51,8 @@ doStem :: T.Text -> T.Text
 doStem =
     extractResult . stemmingSteps . regions
     where
-        extractResult = T.toLower . word
-        stemmingSteps = step5 . step4 . step3 . step2 . step1 . step0
+        extractResult = T.toLower
+        stemmingSteps = step5 . step4 . word . step3 . step2 . step1 . step0
         regions = computeRegions . scrubWord
 
 scrubWord :: T.Text -> T.Text
@@ -288,19 +290,20 @@ step1b wr =
     edF s wr =
         case T.stripSuffix s (word wr) of
             Just w' | T.any (`elem` vowls) w' ->
-                let wr' = mapWR (fromMaybe "" . T.stripSuffix s) wr
-                in
-                   if
-                    | T.takeEnd 2 w' `elem` doubleConsonants -> endsInDoubleConsonant wr'
-                    | T.length w' < 3 -> addAnE wr'
-                    | T.takeEnd 2 w' `elem` specialEndings -> addAnE wr'
-                    | otherwise -> wr'
+                if
+                | T.takeEnd 2 w' `elem` doubleConsonants -> endsInDoubleConsonant wr'
+                -- | T.null (r1 wr') && (shortV w' || twoLetterWord w') -> addAnE wr'
+                | T.length w' <= 3 -> addAnE wr'
+                | T.takeEnd 2 w' `elem` specialEndings -> addAnE wr'
+                | otherwise -> wr'
             _ -> wr
         where
-        doubleConsonants = ["bb", "dd", "ff", "gg", "mm", "nn", "pp", "rr", "tt"]
-        endsInDoubleConsonant = mapWR (T.dropEnd 1)
-        addAnE = mapWR (\w -> if T.null w then w else w `T.snoc` 'e')
-        specialEndings = ["at", "bl", "iz"]
+            twoLetterWord w = T.length w == 2 && T.head w `elem` vowls && T.last w `notElem` vowls
+            wr' = mapWR (T.dropEnd (T.length s)) wr
+            doubleConsonants = ["bb", "dd", "ff", "gg", "mm", "nn", "pp", "rr", "tt"]
+            endsInDoubleConsonant = mapWR (T.dropEnd 1)
+            addAnE = mapWR (\w -> if T.null w then w else w `T.snoc` 'e')
+            specialEndings = ["at", "bl", "iz"]
 
 -- | Replace trailing 'y' with an i where appropriate
 --
@@ -392,8 +395,11 @@ suffixInR2 ::
     (T.Text -> T.Text) ->
     WordRegion ->
     Maybe WordRegion
-suffixInR2 s f wr  =
-    fmap (const $ mapWR f wr) . T.stripSuffix s $ r2 wr
+suffixInR2 s f wr
+    | T.isSuffixOf s (r2 wr)
+        = Just $ mapWR f wr
+    | otherwise
+        = Nothing
 
 -- | Search for the longest suffix perform the replacement iff the suffix is in R1 as well
 step3 ::
@@ -421,13 +427,13 @@ step3 wr =
 -- >>> word $ step4 wr
 -- "consci"
 step4 ::
-    WordRegion ->
-    WordRegion
-step4 wr =
-    let w = word wr
-    in fromMaybe wr . asum $
+    T.Text ->
+    T.Text
+step4 w =
+    maybe w word . asum $
         [const (suffixInR2 s f wr) =<< T.stripSuffix s w | (s, f) <- suffixes]
     where
+    wr = computeRegions w
     ionHandler wr = let
         w = word wr
         in if T.isSuffixOf "sion" w || T.isSuffixOf "tion" w
@@ -455,26 +461,36 @@ step4 wr =
         ]
 
 step5 ::
-    WordRegion ->
-    WordRegion
-step5 wr = fromMaybe wr . asum $ [stripL, stripE] <*> [wr]
+    T.Text ->
+    T.Text
+step5 w = maybe w word . asum $ [stripL, stripE] <*> [wr]
     where
-    vWXY = vowls <> ['w', 'x', 'Y']
-    shortWordCheck w
-        | T.length w >= 4 &&
-            (
-                T.head (T.takeEnd 2 w) `elem` vWXY ||
-                T.head (T.takeEnd 3 w) `notElem` vowls ||
-                T.head (T.takeEnd 4 w) `elem` vowls
-            ) = mapWR (T.dropEnd 1)
-        | otherwise = mapWR id
+    wr = computeRegions w
     stripL wr
-        | T.isSuffixOf "l" (r2 wr) && T.isSuffixOf "ll" (word wr) = Just $ mapWR (T.dropEnd 1) wr
+        | T.isSuffixOf "l" (r2 wr) && T.isSuffixOf "ll" (word wr)
+            = Just $ mapWR (T.dropEnd 1) wr
         | otherwise = Nothing
     stripE wr
-        | T.isSuffixOf "e" (r2 wr) = Just $ mapWR (T.dropEnd 1) wr
-        | T.isSuffixOf "e" (r1 wr) = Just $ shortWordCheck (word wr) wr
-        | otherwise = Just wr
+        | T.isSuffixOf "e" (r2 wr)
+            = Just $ mapWR (T.dropEnd 1) wr
+        | T.isSuffixOf "e" (r1 wr) && not (shortV (word wr))
+            = Just $ mapWR (T.dropEnd 1) wr
+        | otherwise
+            = Just wr
+
+vWXY = vowls <> ['w', 'x', 'Y']
+
+shortV ::
+    T.Text ->
+    Bool
+shortV w = T.length w >= 4 &&
+    (
+        T.head (T.takeEnd 4 w) `notElem` vWXY &&
+        T.head (T.takeEnd 3 w) `elem` vowls &&
+        T.head (T.takeEnd 2 w) `notElem` vowls
+    )
+
+
 --
 -- Initial checks. These short circut for various special cases
 --
