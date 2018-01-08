@@ -292,7 +292,7 @@ step1b wr =
             Just w' | T.any (`elem` vowls) w' ->
                 if
                 | T.takeEnd 2 w' `elem` doubleConsonants -> endsInDoubleConsonant wr'
-                -- | T.null (r1 wr') && (shortV w' || twoLetterWord w') -> addAnE wr'
+                | T.null (r1 wr') && (shortV w' || twoLetterWord w') -> addAnE wr'
                 | T.length w' <= 3 -> addAnE wr'
                 | T.takeEnd 2 w' `elem` specialEndings -> addAnE wr'
                 | otherwise -> wr'

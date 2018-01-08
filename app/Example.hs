@@ -12,12 +12,8 @@ main = do
     source <- fmap (\w -> (w, stem stopwords w) ) . T.lines <$> TIO.readFile "resources/voc.txt"
     validation <- T.lines <$> TIO.readFile "resources/output.txt"
     let errors = foldl validateStemming [] $ source `zip` validation
-    -- print $ "Failed to stem: " ++ (show $ length errors)
     print errors
     where
         validateStemming acc ((raw, stemmed), validation)
             | stemmed == validation = acc
             | otherwise = (raw, stemmed, validation):acc
-
-
-
