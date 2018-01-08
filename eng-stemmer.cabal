@@ -1,13 +1,13 @@
 name:                eng-stemmer
-version:             0.1.0.0
--- synopsis:
--- description:
-homepage:            https://github.com/githubuser/eng-stemmer#readme
+version:             0.1.0.1
+synopsis:            An English language stemmer (Porter2)
+description:         This i
+homepage:            https://github.com/ChrisCoffey/eng-stemmer
 license:             BSD3
 license-file:        LICENSE
 author:              Chris Coffey
-maintainer:          christophermcoffey@gmail.com
-category:            Web
+maintainer:          chris@foldl.io
+category:            NLP, Stemming
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
@@ -48,4 +48,4 @@ test-suite eng-stemmer-test
 
 source-repository head
   type:     git
-  location: https://github.com/githubuser/eng-stemmer
+  location: https://github.com/ChrisCoffey/eng-stemmer
