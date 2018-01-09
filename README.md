@@ -1,6 +1,6 @@
 # English Language Stemmer
 
-https://travis-ci.org/ChrisCoffey/eng-stemmer.svg?branch=master
+[![Build Status](https://travis-ci.org/ChrisCoffey/eng-stemmer.svg?branch=master)](https://travis-ci.org/ChrisCoffey/eng-stemmer)
 
 This is an implementation of the [Porter2 Stemmer](http://snowballstem.org/algorithms/english/stemmer.html). There are still some bugs, but its quite accurate.
 
